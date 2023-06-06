@@ -35,6 +35,7 @@ func (c *C) Init() error {
 		return fmt.Errorf("could not determine config directory: %w",
 			err)
 	}
+	conf = filepath.Join(conf, c.getApp())
 
 	err = os.MkdirAll(conf, 0751)
 	if err != nil {
@@ -91,15 +92,18 @@ func (c *C) Query(q string) (string, error) {
 	return util.EvaluateToString(q, c.path)
 }
 
-func (*C) getPath(confDir string) string {
-	app := filepath.Base(os.Args[0])
-	return filepath.Join(confDir, app)
+func (C) getApp() string {
+	return filepath.Base(os.Args[0])
 }
 
-func (c *C) marshal(in any) ([]byte, error) {
+func (C) getPath(confDir string) string {
+	return filepath.Join(confDir, "config.yaml")
+}
+
+func (C) marshal(in any) ([]byte, error) {
 	return yaml.Marshal(in)
 }
 
-func (c *C) unmarshal(in []byte, out any) error {
+func (C) unmarshal(in []byte, out any) error {
 	return yaml.Unmarshal(in, out)
 }
