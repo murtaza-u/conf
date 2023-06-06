@@ -1,3 +1,9 @@
+/*
+Package vars provides a high-level abstraction over an internal
+concurrency safe map object and operations like Get, Set, Del & Exists
+for management of temporary local cache. It allows to preserve state
+between command executions.
+*/
 package vars
 
 import (
