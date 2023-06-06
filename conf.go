@@ -17,9 +17,7 @@ import (
 )
 
 // C encompasses various methods to read, write and query config file.
-type C struct {
-	path string
-}
+type C struct{}
 
 // New creates a new instance of C. It is mandatory to run the Init()
 // method immediately after.
@@ -30,22 +28,21 @@ func New() *C {
 // Init creates the necessary config directory and file (if absent). It
 // is mandatory to call this method before performing any operations.
 func (c *C) Init() error {
-	conf, err := os.UserConfigDir()
+	path, err := c.getPath()
 	if err != nil {
-		return fmt.Errorf("could not determine config directory: %w",
+		return fmt.Errorf("failed to get config path: %w", err)
+	}
+
+	err = os.MkdirAll(filepath.Dir(path), 0751)
+	if err != nil {
+		return fmt.Errorf(
+			"failed to softly create config directory: %w", err)
+	}
+
+	f, err := os.OpenFile(path, os.O_CREATE, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to softly create config file: %w",
 			err)
-	}
-	conf = filepath.Join(conf, c.getApp())
-
-	err = os.MkdirAll(conf, 0751)
-	if err != nil {
-		return fmt.Errorf("failed to softly create %q: %w", conf, err)
-	}
-
-	c.path = c.getPath(conf)
-	f, err := os.OpenFile(c.path, os.O_CREATE, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to softly create %q: %w", c.path, err)
 	}
 	f.Close()
 
@@ -55,13 +52,14 @@ func (c *C) Init() error {
 // Read reads and marshals the config file into `out`. `out` must
 // therefore be passed by reference.
 func (c *C) Read(out any) error {
-	if c.path == "" {
-		return fmt.Errorf("conf not yet initialised")
+	path, err := c.getPath()
+	if err != nil {
+		return err
 	}
 
-	data, err := lockedfile.Read(c.path)
+	data, err := lockedfile.Read(path)
 	if err != nil {
-		return fmt.Errorf("failed to read %q: %w", c.path, err)
+		return fmt.Errorf("failed to read %q: %w", path, err)
 	}
 
 	err = c.unmarshal(data, out)
@@ -74,14 +72,19 @@ func (c *C) Read(out any) error {
 
 // Write writes the configurations to the config path.
 func (c *C) Write(in any) error {
+	path, err := c.getPath()
+	if err != nil {
+		return err
+	}
+
 	out, err := c.marshal(in)
 	if err != nil {
 		return fmt.Errorf("failed to marshal struct: %w", err)
 	}
 
-	err = lockedfile.Write(c.path, bytes.NewReader(out), 0600)
+	err = lockedfile.Write(path, bytes.NewReader(out), 0600)
 	if err != nil {
-		return fmt.Errorf("failed to write to %q: %w", c.path, err)
+		return fmt.Errorf("failed to write to %q: %w", path, err)
 	}
 
 	return nil
@@ -89,15 +92,26 @@ func (c *C) Write(in any) error {
 
 // Query evaluates the yaml query and returns the result (in string).
 func (c *C) Query(q string) (string, error) {
-	return util.EvaluateToString(q, c.path)
+	path, err := c.getPath()
+	if err != nil {
+		return "", err
+	}
+
+	return util.EvaluateToString(q, path)
 }
 
 func (C) getApp() string {
 	return filepath.Base(os.Args[0])
 }
 
-func (C) getPath(confDir string) string {
-	return filepath.Join(confDir, "config.yaml")
+func (c *C) getPath() (string, error) {
+	conf, err := os.UserConfigDir()
+	if err != nil {
+		return "", fmt.Errorf(
+			"could not determine config directory: %w", err)
+	}
+	path := filepath.Join(conf, c.getApp(), "config.yaml")
+	return path, nil
 }
 
 func (C) marshal(in any) ([]byte, error) {

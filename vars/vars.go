@@ -25,8 +25,6 @@ import (
 type Map struct {
 	mu sync.Mutex
 	m  map[string]string
-
-	path string
 }
 
 // New creates a new map type internally. It is mandatory to run the
@@ -43,21 +41,20 @@ func New() *Map {
 // loads the keys and values into the internal map object. It is
 // mandatory to call this method before performing any operations.
 func (m *Map) Init() error {
-	cache, err := os.UserCacheDir()
+	path, err := m.getPath()
 	if err != nil {
-		return fmt.Errorf("could not determine cache directory: %w",
+		return fmt.Errorf("failed to get cache file path: %w", err)
+	}
+
+	err = os.MkdirAll(filepath.Dir(path), 0751)
+	if err != nil {
+		return fmt.Errorf("failed to softly create cache directory: %w",
 			err)
 	}
 
-	err = os.MkdirAll(cache, 0751)
+	f, err := os.OpenFile(path, os.O_CREATE, 0644)
 	if err != nil {
-		return fmt.Errorf("failed to softly create %q: %w", cache, err)
-	}
-
-	m.path = m.getPath(cache)
-	f, err := os.OpenFile(m.path, os.O_CREATE, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to softly create %q: %w", m.path, err)
+		return fmt.Errorf("failed to softly create %q: %w", path, err)
 	}
 	f.Close()
 
@@ -110,19 +107,24 @@ func (m *Map) Set(key, value string) error {
 	return m.write()
 }
 
-func (*Map) getPath(cacheDir string) string {
+func (*Map) getPath() (string, error) {
+	cache, err := os.UserCacheDir()
+	if err != nil {
+		return "", err
+	}
 	app := filepath.Base(os.Args[0])
-	return filepath.Join(cacheDir, app)
+	return filepath.Join(cache, app), nil
 }
 
 func (m *Map) read() error {
-	if m.path == "" {
-		return fmt.Errorf("vars not yet initialised")
+	path, err := m.getPath()
+	if err != nil {
+		return err
 	}
 
-	data, err := lockedfile.Read(m.path)
+	data, err := lockedfile.Read(path)
 	if err != nil {
-		return fmt.Errorf("failed to read %q: %w", m.path, err)
+		return fmt.Errorf("failed to read %q: %w", path, err)
 	}
 
 	err = m.unmarshalText(data)
@@ -134,10 +136,15 @@ func (m *Map) read() error {
 }
 
 func (m *Map) write() error {
-	out := m.marshalText()
-	err := lockedfile.Write(m.path, bytes.NewReader(out), 0600)
+	path, err := m.getPath()
 	if err != nil {
-		return fmt.Errorf("failed to write to %q: %w", m.path, err)
+		return err
+	}
+
+	out := m.marshalText()
+	err = lockedfile.Write(path, bytes.NewReader(out), 0600)
+	if err != nil {
+		return fmt.Errorf("failed to write to %q: %w", path, err)
 	}
 	return nil
 }
@@ -169,7 +176,7 @@ func (m *Map) unmarshalText(in []byte) error {
 		}
 	}
 	if err := sc.Err(); err != nil {
-		return fmt.Errorf("failed to parse file %q: %w", m.path, err)
+		return fmt.Errorf("failed to parse cache file: %w", err)
 	}
 
 	return nil
