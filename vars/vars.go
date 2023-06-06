@@ -2,12 +2,16 @@ package vars
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/murtaza-u/conf/internal/util"
+
+	"github.com/rogpeppe/go-internal/lockedfile"
 )
 
 // Map encompasses an internal concurrency-safe map object as well as
@@ -110,13 +114,12 @@ func (m *Map) read() error {
 		return fmt.Errorf("vars not yet initialised")
 	}
 
-	f, err := os.OpenFile(m.path, os.O_RDONLY, 0400)
+	data, err := lockedfile.Read(m.path)
 	if err != nil {
 		return fmt.Errorf("failed to read %q: %w", m.path, err)
 	}
-	defer f.Close()
 
-	err = m.unmarshalText(f)
+	err = m.unmarshalText(data)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal text: %w", err)
 	}
@@ -126,7 +129,7 @@ func (m *Map) read() error {
 
 func (m *Map) write() error {
 	out := m.marshalText()
-	err := os.WriteFile(m.path, out, 0600)
+	err := lockedfile.Write(m.path, bytes.NewReader(out), 0600)
 	if err != nil {
 		return fmt.Errorf("failed to write to %q: %w", m.path, err)
 	}
@@ -139,23 +142,23 @@ func (m *Map) marshalText() []byte {
 
 	var out string
 	for k, v := range m.m {
-		out += fmt.Sprintf("%s=%s\n", k, v)
+		out += fmt.Sprintf("%s=%s\n", k, util.EscReturns(v))
 	}
 
 	return []byte(out)
 }
 
-func (m *Map) unmarshalText(f io.Reader) error {
+func (m *Map) unmarshalText(in []byte) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	sc := bufio.NewScanner(f)
+	sc := bufio.NewScanner(bytes.NewReader(in))
 	for sc.Scan() {
 		txt := sc.Text()
 		splits := strings.SplitN(txt, "=", 2)
 		if len(splits) == 2 {
 			k := splits[0]
-			v := splits[1]
+			v := util.UnEscReturns(splits[1])
 			m.m[k] = v
 		}
 	}
