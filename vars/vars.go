@@ -10,6 +10,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -64,6 +65,14 @@ func (m *Map) Init() error {
 	}
 
 	return nil
+}
+
+// MustInit is same as Init but exits the program in case of an error.
+func (m *Map) MustInit() {
+	err := m.Init()
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 // Get returns the value associated with the given key. If the key does

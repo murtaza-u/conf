@@ -8,6 +8,7 @@ package conf
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -47,6 +48,14 @@ func (c *C) Init() error {
 	f.Close()
 
 	return nil
+}
+
+// MustInit is same as Init but exits the program in case of an error.
+func (c *C) MustInit() {
+	err := c.Init()
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 // Read reads and marshals the config file into `out`. `out` must
@@ -98,6 +107,15 @@ func (c *C) Query(q string) (string, error) {
 	}
 
 	return util.EvaluateToString(q, path)
+}
+
+// Data returns the contents of the configuration file.
+func (c *C) Data() ([]byte, error) {
+	path, err := c.getPath()
+	if err != nil {
+		return nil, err
+	}
+	return lockedfile.Read(path)
 }
 
 func (C) getApp() string {
