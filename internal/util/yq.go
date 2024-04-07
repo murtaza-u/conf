@@ -23,7 +23,7 @@ func EvaluateToString(expr string, path string) (string, error) {
 
 	ev := yqlib.NewAllAtOnceEvaluator()
 	buf := new(bytes.Buffer)
-	pr := newPrinter(buf, yqlib.YamlOutputFormat)
+	pr := newPrinter(buf, yqlib.YamlFormat)
 	dc := yqlib.NewYamlDecoder(yqlib.YamlPreferences{})
 	err := ev.EvaluateFiles(expr, []string{path}, pr, dc)
 	if err != nil {
@@ -32,12 +32,15 @@ func EvaluateToString(expr string, path string) (string, error) {
 	return strings.TrimSpace(buf.String()), nil
 }
 
-func newPrinter(w io.Writer, f yqlib.PrinterOutputFormat) yqlib.Printer {
+func newPrinter(w io.Writer, f *yqlib.Format) yqlib.Printer {
 	prefs := yqlib.YamlPreferences{
-		PrintDocSeparators: true,
-		UnwrapScalar:       true,
+		Indent:                      2,
+		ColorsEnabled:               false,
+		LeadingContentPreProcessing: false,
+		PrintDocSeparators:          true,
+		UnwrapScalar:                true,
 	}
-	enc := yqlib.NewYamlEncoder(2, false, prefs)
+	enc := yqlib.NewYamlEncoder(prefs)
 	pwr := yqlib.NewSinglePrinterWriter(w)
 	return yqlib.NewPrinter(enc, pwr)
 }
